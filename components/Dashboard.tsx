@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { initialApprovals, initialPeople } from "@/lib/mock-data";
 import type { Approval, Person, TalentStatus } from "@/lib/types";
 
@@ -13,8 +13,85 @@ const statusOrder: TalentStatus[] = [
   "Aday Havuzu",
 ];
 
+type ApiPerson = {
+  id: string;
+  full_name: string;
+  role: Person["role"];
+  status: TalentStatus;
+  creative_owner?: string | null;
+  last_activity_at?: string | null;
+  contribution_level: Person["contribution"];
+};
+
+type ApiApproval = {
+  id: string;
+  person_id: string;
+  type: string;
+  reason: string;
+  recommendation: TalentStatus | null;
+  proposed_message?: string | null;
+  person?: ApiPerson | null;
+};
+
+type ApiActivity = {
+  id: string;
+  action: string;
+  created_at: string;
+  person?: { full_name?: string | null } | null;
+};
+
 function statusClass(status: TalentStatus) {
-  return `status status-${status.toLowerCase().replaceAll(" ", "-").replaceAll("ü", "u").replaceAll("ö", "o").replaceAll("ş", "s")}`;
+  return `status status-${status
+    .toLowerCase()
+    .replaceAll(" ", "-")
+    .replaceAll("ü", "u")
+    .replaceAll("ö", "o")
+    .replaceAll("ş", "s")}`;
+}
+
+function relativeActivity(date?: string | null) {
+  if (!date) return { label: "Kayıt yok", days: 9999 };
+  const days = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(date).getTime()) / (24 * 60 * 60 * 1000)),
+  );
+  if (days === 0) return { label: "Bugün", days };
+  if (days === 1) return { label: "1 gün önce", days };
+  return { label: `${days} gün önce`, days };
+}
+
+function mapPerson(person: ApiPerson): Person {
+  const activity = relativeActivity(person.last_activity_at);
+  return {
+    id: person.id,
+    name: person.full_name,
+    status: person.status,
+    role: person.role,
+    creative: person.creative_owner || undefined,
+    lastActivity: activity.label,
+    lastActivityDays: activity.days,
+    contribution: person.contribution_level || "Yeni",
+  };
+}
+
+function mapApproval(approval: ApiApproval): Approval {
+  const recommendation = approval.recommendation || "Beklemede";
+  const title =
+    approval.type === "inactivity_review"
+      ? "Aktivite kontrolü"
+      : approval.type.replaceAll("_", " ");
+
+  return {
+    id: approval.id,
+    personId: approval.person_id,
+    title,
+    reason: approval.reason,
+    recommendation,
+    actionLabel: approval.proposed_message
+      ? `${recommendation} + mesaj gönder`
+      : `${recommendation} olarak güncelle`,
+    risk: "Düşük",
+  };
 }
 
 export default function Dashboard() {
@@ -22,6 +99,48 @@ export default function Dashboard() {
   const [approvals, setApprovals] = useState<Approval[]>(initialApprovals);
   const [activityLog, setActivityLog] = useState<string[]>([]);
   const [tab, setTab] = useState<"dashboard" | "roster">("dashboard");
+  const [live, setLive] = useState(false);
+  const [loadingDecision, setLoadingDecision] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadDashboard = useCallback(async () => {
+    try {
+      const response = await fetch("/api/dashboard", { cache: "no-store" });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Dashboard verisi alınamadı.");
+      }
+
+      if (!payload.configured) {
+        setLive(false);
+        return;
+      }
+
+      setLive(true);
+      setPeople((payload.people as ApiPerson[]).map(mapPerson));
+      setApprovals((payload.approvals as ApiApproval[]).map(mapApproval));
+      setActivityLog(
+        (payload.activity as ApiActivity[]).map((item) => {
+          const who = item.person?.full_name || "Sistem";
+          const when = new Date(item.created_at).toLocaleString("tr-TR", {
+            dateStyle: "short",
+            timeStyle: "short",
+          });
+          return `${who}: ${item.action} · ${when}`;
+        }),
+      );
+      setError(null);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Bağlantı hatası");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDashboard();
+    const timer = window.setInterval(() => void loadDashboard(), 5000);
+    return () => window.clearInterval(timer);
+  }, [loadDashboard]);
 
   const counts = useMemo(() => {
     return statusOrder.map((status) => ({
@@ -30,36 +149,55 @@ export default function Dashboard() {
     }));
   }, [people]);
 
-  const resolveApproval = (approval: Approval, decision: "approve" | "hold" | "reject") => {
-    const person = people.find((item) => item.id === approval.personId);
-    if (!person) return;
+  const resolveApproval = async (
+    approval: Approval,
+    decision: "approve" | "hold" | "reject",
+  ) => {
+    if (!live) {
+      const person = people.find((item) => item.id === approval.personId);
+      if (!person) return;
 
-    if (decision === "approve") {
-      setPeople((current) =>
-        current.map((item) =>
-          item.id === person.id ? { ...item, status: approval.recommendation } : item,
-        ),
+      if (decision === "approve") {
+        setPeople((currentPeople) =>
+          currentPeople.map((item) =>
+            item.id === person.id
+              ? { ...item, status: approval.recommendation }
+              : item,
+          ),
+        );
+      }
+
+      setApprovals((currentApprovals) =>
+        currentApprovals.filter((item) => item.id !== approval.id),
       );
-      setActivityLog((current) => [
-        `${person.name}: “${approval.title}” onaylandı → ${approval.recommendation}`,
-        ...current,
+      setActivityLog((currentLog) => [
+        `${person.name}: demo kararı → ${decision}`,
+        ...currentLog,
       ]);
+      return;
     }
 
-    if (decision === "hold") {
-      setPeople((current) =>
-        current.map((item) =>
-          item.id === person.id ? { ...item, status: "Beklemede" } : item,
-        ),
+    setLoadingDecision(approval.id);
+    try {
+      const response = await fetch(`/api/approvals/${approval.id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Karar uygulanamadı.");
+      }
+      await loadDashboard();
+    } catch (decisionError) {
+      setError(
+        decisionError instanceof Error
+          ? decisionError.message
+          : "Karar uygulanamadı.",
       );
-      setActivityLog((current) => [`${person.name}: karar beklemeye alındı.`, ...current]);
+    } finally {
+      setLoadingDecision(null);
     }
-
-    if (decision === "reject") {
-      setActivityLog((current) => [`${person.name}: öneri reddedildi, mevcut statü korundu.`, ...current]);
-    }
-
-    setApprovals((current) => current.filter((item) => item.id !== approval.id));
   };
 
   return (
@@ -74,11 +212,20 @@ export default function Dashboard() {
         </div>
 
         <nav>
-          <button className={tab === "dashboard" ? "nav-active" : ""} onClick={() => setTab("dashboard")}>Genel Bakış</button>
-          <button className={tab === "roster" ? "nav-active" : ""} onClick={() => setTab("roster")}>Kadro</button>
-          <button disabled>Yeni Başvurular <small>{people.filter((p) => p.status === "Yeni Aday").length}</small></button>
+          <button className={tab === "dashboard" ? "nav-active" : ""} onClick={() => setTab("dashboard")}>
+            Genel Bakış
+          </button>
+          <button className={tab === "roster" ? "nav-active" : ""} onClick={() => setTab("roster")}>
+            Kadro
+          </button>
+          <button disabled>
+            Yeni Başvurular
+            <small>{people.filter((p) => p.status === "Yeni Aday").length}</small>
+          </button>
           <button disabled>Görevler</button>
-          <button disabled>WhatsApp <span className="soon">yakında</span></button>
+          <button disabled>
+            WhatsApp <span className="soon">{live ? "canlı" : "demo"}</span>
+          </button>
         </nav>
 
         <div className="sidebar-foot">
@@ -93,16 +240,21 @@ export default function Dashboard() {
             <p className="eyebrow">PRO WRESTLING BOSPHORUS</p>
             <h1>{tab === "dashboard" ? "Operasyon Paneli" : "Kadro"}</h1>
           </div>
-          <div className="admin-pill">Yönetici Modu</div>
+          <div className="admin-pill">{live ? "CANLI VERİ" : "DEMO MODU"}</div>
         </header>
+
+        {error && <div className="error-banner">{error}</div>}
 
         {tab === "dashboard" ? (
           <>
             <section className="hero-card">
               <div>
-                <p className="eyebrow">BUGÜN</p>
+                <p className="eyebrow">{live ? "CANLI KARAR KUYRUĞU" : "DEMO"}</p>
                 <h2>{approvals.length} işlem senin onayını bekliyor.</h2>
-                <p>Bot adayları sınıflandırır ve öneri üretir. Sen onaylamadan hiçbir statü veya iletişim işlemi uygulanmaz.</p>
+                <p>
+                  Listener mesajları kaydeder ve kurallar öneri üretir. Sen
+                  onaylamadan statü değişmez, kimseye otomatik mesaj gitmez.
+                </p>
               </div>
               <div className="hero-number">{approvals.length}</div>
             </section>
@@ -133,7 +285,11 @@ export default function Dashboard() {
                 </div>
               ) : (
                 approvals.map((approval) => {
-                  const person = people.find((item) => item.id === approval.personId)!;
+                  const person = people.find((item) => item.id === approval.personId);
+                  if (!person) return null;
+
+                  const busy = loadingDecision === approval.id;
+
                   return (
                     <article className="approval-card" key={approval.id}>
                       <div className="approval-main">
@@ -141,7 +297,9 @@ export default function Dashboard() {
                         <div>
                           <div className="approval-title-row">
                             <h3>{person.name}</h3>
-                            <span className={statusClass(person.status)}>{person.status}</span>
+                            <span className={statusClass(person.status)}>
+                              {person.status}
+                            </span>
                           </div>
                           <strong>{approval.title}</strong>
                           <p>{approval.reason}</p>
@@ -151,9 +309,27 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div className="approval-actions">
-                        <button className="btn-primary" onClick={() => resolveApproval(approval, "approve")}>Onayla</button>
-                        <button className="btn-secondary" onClick={() => resolveApproval(approval, "hold")}>Beklet</button>
-                        <button className="btn-ghost" onClick={() => resolveApproval(approval, "reject")}>Reddet</button>
+                        <button
+                          className="btn-primary"
+                          disabled={busy}
+                          onClick={() => void resolveApproval(approval, "approve")}
+                        >
+                          Onayla
+                        </button>
+                        <button
+                          className="btn-secondary"
+                          disabled={busy}
+                          onClick={() => void resolveApproval(approval, "hold")}
+                        >
+                          Beklet
+                        </button>
+                        <button
+                          className="btn-ghost"
+                          disabled={busy}
+                          onClick={() => void resolveApproval(approval, "reject")}
+                        >
+                          Reddet
+                        </button>
                       </div>
                     </article>
                   );
@@ -164,14 +340,21 @@ export default function Dashboard() {
             {activityLog.length > 0 && (
               <section className="log-card">
                 <p className="eyebrow">SON İŞLEMLER</p>
-                {activityLog.slice(0, 5).map((item, index) => <div key={`${item}-${index}`}>{item}</div>)}
+                {activityLog.slice(0, 8).map((item, index) => (
+                  <div key={`${item}-${index}`}>{item}</div>
+                ))}
               </section>
             )}
           </>
         ) : (
           <section className="roster-card">
             <div className="roster-head">
-              <span>Kişi</span><span>Rol</span><span>Statü</span><span>Creative</span><span>Son Aktivite</span><span>Katkı</span>
+              <span>Kişi</span>
+              <span>Rol</span>
+              <span>Statü</span>
+              <span>Creative</span>
+              <span>Son Aktivite</span>
+              <span>Katkı</span>
             </div>
             {people.map((person) => (
               <div className="roster-row" key={person.id}>
