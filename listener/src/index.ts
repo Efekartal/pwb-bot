@@ -270,6 +270,14 @@ async function startSocket() {
 
   socket = nextSocket;
 
+  if (!state.creds.registered && process.env.WA_PHONE_NUMBER) {
+    const phone = process.env.WA_PHONE_NUMBER.replace(/\D/g, "");
+    if (phone) {
+      const pairingCode = await nextSocket.requestPairingCode(phone);
+      logger.info({ pairingCode }, "Use this WhatsApp pairing code on the dedicated PWB Bot phone");
+    }
+  }
+
   nextSocket.ev.on("creds.update", saveCreds);
 
   nextSocket.ev.on("connection.update", (update) => {
