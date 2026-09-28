@@ -101,3 +101,18 @@ nav small { background: #74202a; color: white; border-radius: 99px; padding: 2px
   .approval-actions { width:100%; }
   .approval-actions button { flex:1; }
 }
+
+.error-banner {
+  margin: -10px 0 18px;
+  border: 1px solid #6d3039;
+  background: #261318;
+  color: #e2a2aa;
+  padding: 11px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.approval-actions button:disabled {
+  opacity: .45;
+  cursor: wait;
+}
