@@ -127,6 +127,16 @@ function parseEventText(text: string): Omit<ParsedWhatsAppEvent, "sentAt"> {
     };
   }
 
+  match = cleaned.match(/^(.+?),\s*(.+?)\s+(?:adlı kişiyi|kişisini) çıkardı\.?$/i);
+  if (match) {
+    return {
+      eventType: "removed",
+      actorAlias: normalizeAlias(match[1]),
+      subjectAlias: normalizeAlias(match[2]),
+      rawText: cleaned,
+    };
+  }
+
   match = cleaned.match(/^(.+?)\s+sizi ekledi\.?$/i);
   if (match) {
     return { eventType: "added", actorAlias: normalizeAlias(match[1]), rawText: cleaned };
@@ -160,10 +170,21 @@ export function parseWhatsAppExport(text: string) {
       flush();
       const [, day, month, year, hour, minute, second, rawSender, firstLine] = messageMatch;
       const sender = normalizeAlias(rawSender);
+      const sentAt = toIso(day, month, year, hour, minute, second);
+      const possibleEvent = parseEventText(firstLine);
+
+      if (possibleEvent.eventType !== "system") {
+        events.push({
+          sentAt,
+          ...possibleEvent,
+        });
+        continue;
+      }
+
       current = {
         sender,
         senderNormalized: sender.toLocaleLowerCase("tr-TR"),
-        sentAt: toIso(day, month, year, hour, minute, second),
+        sentAt,
         text: cleanInvisible(firstLine),
         messageType: classifyMessage(firstLine),
         topics: classifyTopics(firstLine),
