@@ -96,12 +96,44 @@ create table public.activity_log (
 
 create index activity_log_person_created_at_idx on public.activity_log(person_id, created_at desc);
 
+create table public.import_runs (
+  id uuid primary key default gen_random_uuid(),
+  source_file_name text not null,
+  source_sha256 text not null unique,
+  group_name text not null,
+  source_kind text not null default 'whatsapp_export',
+  parsed_message_count integer not null default 0,
+  inserted_message_count integer not null default 0,
+  participant_count integer not null default 0,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table public.people_aliases (
+  id uuid primary key default gen_random_uuid(),
+  person_id uuid not null references public.people(id) on delete cascade,
+  alias text not null,
+  alias_normalized text not null unique,
+  source text not null default 'whatsapp_export',
+  created_at timestamptz not null default now()
+);
+
+create index people_aliases_person_id_idx on public.people_aliases(person_id);
+
+alter table public.messages
+  add column source_type text not null default 'live',
+  add column import_run_id uuid references public.import_runs(id) on delete set null;
+
+create index messages_import_run_id_idx on public.messages(import_run_id);
+
 alter table public.people enable row level security;
 alter table public.wa_groups enable row level security;
 alter table public.messages enable row level security;
 alter table public.approvals enable row level security;
 alter table public.outbox enable row level security;
 alter table public.activity_log enable row level security;
+alter table public.import_runs enable row level security;
+alter table public.people_aliases enable row level security;
 
 create policy "authenticated can manage people" on public.people for all to authenticated using (true) with check (true);
 create policy "authenticated can manage groups" on public.wa_groups for all to authenticated using (true) with check (true);
@@ -109,3 +141,11 @@ create policy "authenticated can read messages" on public.messages for select to
 create policy "authenticated can manage approvals" on public.approvals for all to authenticated using (true) with check (true);
 create policy "authenticated can manage outbox" on public.outbox for all to authenticated using (true) with check (true);
 create policy "authenticated can read logs" on public.activity_log for select to authenticated using (true);
+
+create policy "authenticated can manage import runs"
+  on public.import_runs for all to authenticated
+  using (true) with check (true);
+
+create policy "authenticated can manage people aliases"
+  on public.people_aliases for all to authenticated
+  using (true) with check (true);
