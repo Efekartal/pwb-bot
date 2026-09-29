@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   inferGroupName,
-  looksLikeSystemMessage,
   messageFingerprint,
   normalizeAlias,
   parseWhatsAppExport,
@@ -12,6 +11,8 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const PARSER_VERSION = 2;
 
 function chunks<T>(items: T[], size: number) {
   const result: T[][] = [];
@@ -37,41 +38,49 @@ export async function POST(request: Request) {
   const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
   const db = getSupabaseAdmin();
 
-  const { data: existingRun } = await db
+  const { data: existingRun, error: existingRunError } = await db
     .from("import_runs")
     .select("*")
     .eq("source_sha256", sha256)
     .maybeSingle();
 
-  if (existingRun) {
+  if (existingRunError) {
+    return NextResponse.json({ error: existingRunError.message }, { status: 500 });
+  }
+
+  const existingParserVersion = Number(existingRun?.metadata?.parser_version || 1);
+
+  if (existingRun && existingParserVersion >= PARSER_VERSION) {
     return NextResponse.json({
       ok: true,
       duplicate: true,
       importRun: existingRun,
-      message: "Bu ZIP daha önce içe aktarılmış.",
+      message: "Bu ZIP güncel parser ile daha önce içe aktarılmış.",
     });
   }
 
   const zip = await JSZip.loadAsync(bytes);
-  const chatEntry = Object.values(zip.files).find(
-    (entry) => !entry.dir && /(^|\/)_(chat|sohbet)\.txt$/i.test(entry.name),
-  ) ?? Object.values(zip.files).find(
-    (entry) => !entry.dir && entry.name.toLowerCase().endsWith(".txt"),
-  );
+  const chatEntry =
+    Object.values(zip.files).find(
+      (entry) => !entry.dir && /(^|\/)_(chat|sohbet)\.txt$/i.test(entry.name),
+    ) ??
+    Object.values(zip.files).find(
+      (entry) => !entry.dir && entry.name.toLowerCase().endsWith(".txt"),
+    );
 
   if (!chatEntry) {
-    return NextResponse.json({ error: "ZIP içinde WhatsApp _chat.txt bulunamadı." }, { status: 400 });
+    return NextResponse.json(
+      { error: "ZIP içinde WhatsApp _chat.txt bulunamadı." },
+      { status: 400 },
+    );
   }
 
   const chatText = await chatEntry.async("string");
-  const allMessages = parseWhatsAppExport(chatText);
-  const groupName = inferGroupName(upload.name, allMessages);
-  const messages = allMessages.filter(
-    (message) => !looksLikeSystemMessage(message.sender, message.text, groupName),
-  );
+  const { messages, events } = parseWhatsAppExport(chatText);
+  const groupName = inferGroupName(upload.name);
 
-  if (!messages.length) {
-    return NextResponse.json({ error: "İşlenebilir mesaj bulunamadı." }, { status: 400 });
+  if (!messages.length && !events.length) {
+    return NextResponse.json({ error: "İşlenebilir kayıt bulunamadı." }, { status: 400 });
   }
 
   const syntheticGroupJid =
@@ -96,7 +105,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: groupError.message }, { status: 500 });
   }
 
-  const aliases = [...new Set(messages.map((message) => message.sender))];
+  const aliases = [
+    ...new Set(
+      [
+        ...messages.map((message) => message.sender),
+        ...events.map((event) => event.subjectAlias).filter(Boolean),
+      ] as string[],
+    ),
+  ];
+
   const aliasMap = new Map<string, string>();
 
   for (const alias of aliases) {
@@ -123,7 +140,9 @@ export async function POST(request: Request) {
         full_name: alias,
         whatsapp_name: alias,
         role: "Topluluk",
-        status: "Aday Havuzu",
+        status: null,
+        is_pipeline_tracked: false,
+        community_state: "unknown",
         contribution_level: "Yeni",
       })
       .select("id")
@@ -147,25 +166,73 @@ export async function POST(request: Request) {
     aliasMap.set(aliasNormalized, person.id);
   }
 
-  const { data: importRun, error: importRunError } = await db
-    .from("import_runs")
-    .insert({
-      source_file_name: upload.name,
-      source_sha256: sha256,
-      group_name: groupName,
-      parsed_message_count: messages.length,
-      participant_count: aliases.length,
-      metadata: {
-        zip_entry: chatEntry.name,
-        first_message_at: messages[0]?.sentAt ?? null,
-        last_message_at: messages.at(-1)?.sentAt ?? null,
-      },
-    })
-    .select("*")
-    .single();
+  let importRun = existingRun;
 
-  if (importRunError) {
-    return NextResponse.json({ error: importRunError.message }, { status: 500 });
+  if (existingRun) {
+    const cleanupResults = await Promise.all([
+      db.from("messages").delete().eq("import_run_id", existingRun.id),
+      db.from("group_events").delete().eq("import_run_id", existingRun.id),
+      db.from("activity_log").delete().contains("metadata", { import_run_id: existingRun.id }),
+    ]);
+
+    const cleanupError = cleanupResults.find((result) => result.error)?.error;
+    if (cleanupError) {
+      return NextResponse.json({ error: cleanupError.message }, { status: 500 });
+    }
+
+    const { data, error } = await db
+      .from("import_runs")
+      .update({
+        source_file_name: upload.name,
+        group_name: groupName,
+        parsed_message_count: messages.length,
+        inserted_message_count: 0,
+        participant_count: aliases.length,
+        metadata: {
+          zip_entry: chatEntry.name,
+          parser_version: PARSER_VERSION,
+          system_event_count: events.length,
+          first_message_at: messages[0]?.sentAt ?? null,
+          last_message_at: messages.at(-1)?.sentAt ?? null,
+          reprocessed_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", existingRun.id)
+      .select("*")
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    importRun = data;
+  } else {
+    const { data, error } = await db
+      .from("import_runs")
+      .insert({
+        source_file_name: upload.name,
+        source_sha256: sha256,
+        group_name: groupName,
+        parsed_message_count: messages.length,
+        participant_count: aliases.length,
+        metadata: {
+          zip_entry: chatEntry.name,
+          parser_version: PARSER_VERSION,
+          system_event_count: events.length,
+          first_message_at: messages[0]?.sentAt ?? null,
+          last_message_at: messages.at(-1)?.sentAt ?? null,
+        },
+      })
+      .select("*")
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    importRun = data;
+  }
+
+  if (!importRun) {
+    return NextResponse.json({ error: "Import kaydı oluşturulamadı." }, { status: 500 });
   }
 
   const rows = messages.map((message) => {
@@ -190,10 +257,13 @@ export async function POST(request: Request) {
       raw_metadata: {
         source_file_name: upload.name,
         sender_alias: message.sender,
+        parser_version: PARSER_VERSION,
       },
       sent_at: message.sentAt,
       source_type: "whatsapp_export",
       import_run_id: importRun.id,
+      topics: message.topics,
+      is_substantive: message.isSubstantive,
     };
   });
 
@@ -208,6 +278,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     insertedCount += data?.length ?? 0;
+  }
+
+  if (events.length) {
+    const eventRows = events.map((event) => ({
+      group_id: group.id,
+      import_run_id: importRun.id,
+      event_type: event.eventType,
+      subject_alias: event.subjectAlias ?? null,
+      subject_person_id: event.subjectAlias
+        ? aliasMap.get(normalizeAlias(event.subjectAlias).toLocaleLowerCase("tr-TR")) ?? null
+        : null,
+      actor_alias: event.actorAlias ?? null,
+      raw_text: event.rawText,
+      occurred_at: event.sentAt,
+    }));
+
+    for (const batch of chunks(eventRows, 500)) {
+      const { error } = await db.from("group_events").insert(batch);
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+    }
   }
 
   const newestByPerson = new Map<string, string>();
@@ -239,8 +331,17 @@ export async function POST(request: Request) {
         import_run_id: importRun.id,
         group_name: groupName,
         last_activity_at: lastActivityAt,
+        parser_version: PARSER_VERSION,
       },
     });
+  }
+
+  const { error: membershipError } = await db.rpc("rebuild_group_memberships", {
+    target_group_id: group.id,
+  });
+
+  if (membershipError) {
+    return NextResponse.json({ error: membershipError.message }, { status: 500 });
   }
 
   await db
@@ -251,8 +352,11 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     duplicate: false,
+    reprocessed: Boolean(existingRun),
+    parserVersion: PARSER_VERSION,
     groupName,
     parsedMessages: messages.length,
+    systemEvents: events.length,
     insertedMessages: insertedCount,
     participants: aliases.length,
     importRunId: importRun.id,
