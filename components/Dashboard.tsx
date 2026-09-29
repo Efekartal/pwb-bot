@@ -98,7 +98,10 @@ export default function Dashboard() {
   const [people, setPeople] = useState<Person[]>(initialPeople);
   const [approvals, setApprovals] = useState<Approval[]>(initialApprovals);
   const [activityLog, setActivityLog] = useState<string[]>([]);
-  const [tab, setTab] = useState<"dashboard" | "roster">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "roster" | "imports">("dashboard");
+  const [importRuns, setImportRuns] = useState<any[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
   const [live, setLive] = useState(false);
   const [loadingDecision, setLoadingDecision] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +133,15 @@ export default function Dashboard() {
           return `${who}: ${item.action} · ${when}`;
         }),
       );
+      try {
+        const importsResponse = await fetch("/api/import/runs", { cache: "no-store" });
+        if (importsResponse.ok) {
+          const importsPayload = await importsResponse.json();
+          setImportRuns(importsPayload.runs ?? []);
+        }
+      } catch {
+        // Import history is non-critical for the main dashboard.
+      }
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Bağlantı hatası");
@@ -218,6 +230,9 @@ export default function Dashboard() {
           <button className={tab === "roster" ? "nav-active" : ""} onClick={() => setTab("roster")}>
             Kadro
           </button>
+          <button className={tab === "imports" ? "nav-active" : ""} onClick={() => setTab("imports")}>
+            WhatsApp Arşivi
+          </button>
           <button disabled>
             Yeni Başvurular
             <small>{people.filter((p) => p.status === "Yeni Aday").length}</small>
@@ -238,7 +253,7 @@ export default function Dashboard() {
         <header className="topbar">
           <div>
             <p className="eyebrow">PRO WRESTLING BOSPHORUS</p>
-            <h1>{tab === "dashboard" ? "Operasyon Paneli" : "Kadro"}</h1>
+            <h1>{tab === "dashboard" ? "Operasyon Paneli" : tab === "roster" ? "Kadro" : "WhatsApp Arşivi"}</h1>
           </div>
           <div className="admin-pill">{live ? "CANLI VERİ" : "DEMO MODU"}</div>
         </header>
@@ -346,7 +361,7 @@ export default function Dashboard() {
               </section>
             )}
           </>
-        ) : (
+        ) : tab === "roster" ? (
           <section className="roster-card">
             <div className="roster-head">
               <span>Kişi</span>
@@ -366,6 +381,106 @@ export default function Dashboard() {
                 <span>{person.contribution}</span>
               </div>
             ))}
+          </section>
+        ) : (
+          <section className="imports-page">
+            <div className="import-drop-card">
+              <div>
+                <p className="eyebrow">WHATSAPP EXPORT</p>
+                <h2>Arşivi içe aktar</h2>
+                <p>
+                  WhatsApp’tan “Sohbeti dışa aktar → Medyasız” ile aldığın ZIP’i yükle.
+                  Sistem kişileri eşleştirir, yeni mesajları kaydeder ve son aktivite tarihlerini günceller.
+                </p>
+              </div>
+              <form
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const form = event.currentTarget;
+                  const input = form.elements.namedItem("archive") as HTMLInputElement;
+                  const file = input.files?.[0];
+                  if (!file) return;
+
+                  setImporting(true);
+                  setImportResult(null);
+                  setError(null);
+
+                  try {
+                    const data = new FormData();
+                    data.append("file", file);
+
+                    const response = await fetch("/api/import/whatsapp", {
+                      method: "POST",
+                      body: data,
+                    });
+                    const payload = await response.json();
+
+                    if (!response.ok) {
+                      throw new Error(payload.error || "İçe aktarma başarısız.");
+                    }
+
+                    setImportResult(
+                      payload.duplicate
+                        ? "Bu ZIP daha önce işlenmiş. Yeni kayıt eklenmedi."
+                        : `${payload.groupName}: ${payload.insertedMessages} yeni mesaj, ${payload.participants} katılımcı işlendi.`,
+                    );
+
+                    form.reset();
+                    await loadDashboard();
+                  } catch (uploadError) {
+                    setError(
+                      uploadError instanceof Error
+                        ? uploadError.message
+                        : "İçe aktarma başarısız.",
+                    );
+                  } finally {
+                    setImporting(false);
+                  }
+                }}
+              >
+                <input name="archive" type="file" accept=".zip,application/zip" />
+                <button className="btn-primary import-button" disabled={importing} type="submit">
+                  {importing ? "İşleniyor…" : "ZIP’i içe aktar"}
+                </button>
+              </form>
+              {importResult && <div className="import-success">{importResult}</div>}
+            </div>
+
+            <div className="section-heading import-history-heading">
+              <div>
+                <p className="eyebrow">GEÇMİŞ</p>
+                <h2>Son içe aktarmalar</h2>
+              </div>
+              <span>{importRuns.length} kayıt</span>
+            </div>
+
+            <div className="import-history">
+              {importRuns.length === 0 ? (
+                <div className="empty-card">
+                  <strong>Henüz arşiv yüklenmedi.</strong>
+                  <p>İlk PWB WhatsApp ZIP’ini yukarıdan ekleyebilirsin.</p>
+                </div>
+              ) : (
+                importRuns.map((run) => (
+                  <article className="import-run" key={run.id}>
+                    <div>
+                      <strong>{run.group_name}</strong>
+                      <span>{run.source_file_name}</span>
+                    </div>
+                    <div className="import-run-stats">
+                      <b>{run.inserted_message_count}</b> yeni mesaj
+                      <b>{run.participant_count}</b> kişi
+                    </div>
+                    <time>
+                      {new Date(run.created_at).toLocaleString("tr-TR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
+                    </time>
+                  </article>
+                ))
+              )}
+            </div>
           </section>
         )}
       </section>
