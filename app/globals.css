@@ -116,3 +116,60 @@ nav small { background: #74202a; color: white; border-radius: 99px; padding: 2px
   opacity: .45;
   cursor: wait;
 }
+
+.imports-page { display:grid; gap:24px; }
+.import-drop-card {
+  border:1px solid #3a2a2e;
+  background:linear-gradient(145deg,#111216,#1b1114);
+  border-radius:16px;
+  padding:28px;
+  display:grid;
+  grid-template-columns:1fr minmax(270px, .55fr);
+  gap:28px;
+  align-items:center;
+}
+.import-drop-card h2 { margin:5px 0 10px; font-size:26px; }
+.import-drop-card p:not(.eyebrow) { margin:0; color:var(--muted); line-height:1.55; max-width:720px; }
+.import-drop-card form { display:grid; gap:10px; padding:16px; border:1px dashed #4c3a3f; border-radius:12px; background:#0e0f12; }
+.import-drop-card input[type="file"] { width:100%; color:#b8bbc3; font-size:12px; }
+.import-drop-card input[type="file"]::file-selector-button {
+  border:1px solid #34363e;
+  background:#1b1c21;
+  color:#ddd;
+  border-radius:8px;
+  padding:8px 10px;
+  margin-right:10px;
+  cursor:pointer;
+}
+.import-button { border:0; border-radius:8px; padding:10px 12px; cursor:pointer; }
+.import-success {
+  grid-column:1 / -1;
+  border:1px solid #275d43;
+  background:#102219;
+  color:#8ed0aa;
+  border-radius:9px;
+  padding:11px 13px;
+  font-size:12px;
+}
+.import-history-heading { margin-top:8px; }
+.import-history { display:grid; gap:9px; }
+.import-run {
+  display:grid;
+  grid-template-columns:1.4fr 1fr auto;
+  gap:18px;
+  align-items:center;
+  border:1px solid var(--border);
+  background:var(--panel);
+  border-radius:12px;
+  padding:15px 18px;
+}
+.import-run > div:first-child { display:grid; gap:3px; }
+.import-run span, .import-run time { color:var(--muted); font-size:11px; }
+.import-run-stats { display:flex; gap:8px; align-items:baseline; color:#aaaeb7; font-size:11px; }
+.import-run-stats b { color:#f2f2f3; font-size:15px; }
+
+@media (max-width: 760px) {
+  .import-drop-card { grid-template-columns:1fr; padding:20px; }
+  .import-run { grid-template-columns:1fr; gap:9px; }
+  .import-run-stats { justify-content:flex-start; }
+}
