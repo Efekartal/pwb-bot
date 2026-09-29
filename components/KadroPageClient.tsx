@@ -103,6 +103,7 @@ export default function KadroPageClient() {
         <nav>
           <a href="/">Genel Bakış</a>
           <a className="nav-active" href="/kadro">Kadro</a>
+          <a href="/temizlik">Kadro Temizliği</a>
           <a href="/">WhatsApp Arşivi</a>
         </nav>
 
