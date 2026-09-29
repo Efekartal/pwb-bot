@@ -77,8 +77,16 @@ export async function GET() {
   const summary = {
     archivePeople: enrichedPeople.length,
     pipelinePeople: enrichedPeople.filter((person) => person.is_pipeline_tracked).length,
-    active30d: enrichedPeople.filter((person) => withinDays(person.last_activity_at, 30)).length,
-    active60d: enrichedPeople.filter((person) => withinDays(person.last_activity_at, 60)).length,
+    active30d: enrichedPeople.filter(
+      (person) =>
+        person.community_state === "current" &&
+        withinDays(person.last_activity_at, 30),
+    ).length,
+    active60d: enrichedPeople.filter(
+      (person) =>
+        person.community_state === "current" &&
+        withinDays(person.last_activity_at, 60),
+    ).length,
     currentMembers: enrichedPeople.filter((person) => person.community_state === "current").length,
     leftMembers: enrichedPeople.filter((person) =>
       ["left", "removed"].includes(person.community_state),
