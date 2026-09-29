@@ -631,3 +631,9 @@ nav a:hover { background:#18191e; color:#fff; }
   .cleanup-summary { grid-template-columns:1fr; }
   .cleanup-row { grid-template-columns:1fr; }
 }
+
+.roster-gone {
+  opacity:.48;
+  background:#0d0e11;
+}
+.roster-gone:hover { opacity:.7; }
