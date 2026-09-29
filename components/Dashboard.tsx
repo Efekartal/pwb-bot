@@ -17,10 +17,13 @@ type ApiPerson = {
   id: string;
   full_name: string;
   role: Person["role"];
-  status: TalentStatus;
+  status: TalentStatus | null;
+  is_pipeline_tracked?: boolean;
+  community_state?: Person["communityState"];
   creative_owner?: string | null;
   last_activity_at?: string | null;
   contribution_level: Person["contribution"];
+  top_topics?: string[];
 };
 
 type ApiApproval = {
@@ -40,13 +43,33 @@ type ApiActivity = {
   person?: { full_name?: string | null } | null;
 };
 
-function statusClass(status: TalentStatus) {
+type DashboardSummary = {
+  archivePeople: number;
+  pipelinePeople: number;
+  active30d: number;
+  active60d: number;
+  currentMembers: number;
+  leftMembers: number;
+  unknownMembership: number;
+};
+
+type TopicSummary = { topic: string; count: number };
+
+function statusClass(status: TalentStatus | null) {
+  if (!status) return "status status-archive";
   return `status status-${status
     .toLowerCase()
     .replaceAll(" ", "-")
     .replaceAll("ü", "u")
     .replaceAll("ö", "o")
     .replaceAll("ş", "s")}`;
+}
+
+function membershipLabel(state: Person["communityState"]) {
+  if (state === "current") return "Mevcut";
+  if (state === "left") return "Ayrıldı";
+  if (state === "removed") return "Çıkarıldı";
+  return "Bilinmiyor";
 }
 
 function relativeActivity(date?: string | null) {
@@ -66,11 +89,14 @@ function mapPerson(person: ApiPerson): Person {
     id: person.id,
     name: person.full_name,
     status: person.status,
+    isPipelineTracked: Boolean(person.is_pipeline_tracked),
+    communityState: person.community_state || "unknown",
     role: person.role,
     creative: person.creative_owner || undefined,
     lastActivity: activity.label,
     lastActivityDays: activity.days,
     contribution: person.contribution_level || "Yeni",
+    topTopics: person.top_topics || [],
   };
 }
 
@@ -98,6 +124,16 @@ export default function Dashboard() {
   const [people, setPeople] = useState<Person[]>(initialPeople);
   const [approvals, setApprovals] = useState<Approval[]>(initialApprovals);
   const [activityLog, setActivityLog] = useState<string[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary>({
+    archivePeople: 0,
+    pipelinePeople: 0,
+    active30d: 0,
+    active60d: 0,
+    currentMembers: 0,
+    leftMembers: 0,
+    unknownMembership: 0,
+  });
+  const [globalTopics, setGlobalTopics] = useState<TopicSummary[]>([]);
   const [tab, setTab] = useState<"dashboard" | "roster" | "imports">("dashboard");
   const [importRuns, setImportRuns] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
@@ -123,6 +159,8 @@ export default function Dashboard() {
       setLive(true);
       setPeople((payload.people as ApiPerson[]).map(mapPerson));
       setApprovals((payload.approvals as ApiApproval[]).map(mapApproval));
+      setSummary(payload.summary);
+      setGlobalTopics(payload.globalTopics ?? []);
       setActivityLog(
         (payload.activity as ApiActivity[]).map((item) => {
           const who = item.person?.full_name || "Sistem";
@@ -157,7 +195,9 @@ export default function Dashboard() {
   const counts = useMemo(() => {
     return statusOrder.map((status) => ({
       status,
-      count: people.filter((person) => person.status === status).length,
+      count: people.filter(
+        (person) => person.isPipelineTracked && person.status === status,
+      ).length,
     }));
   }, [people]);
 
@@ -235,7 +275,7 @@ export default function Dashboard() {
           </button>
           <button disabled>
             Yeni Başvurular
-            <small>{people.filter((p) => p.status === "Yeni Aday").length}</small>
+            <small>{people.filter((p) => p.isPipelineTracked && p.status === "Yeni Aday").length}</small>
           </button>
           <button disabled>Görevler</button>
           <button disabled>
@@ -273,6 +313,53 @@ export default function Dashboard() {
               </div>
               <div className="hero-number">{approvals.length}</div>
             </section>
+
+            <section className="archive-summary-grid">
+              <article>
+                <span>Arşivde görülen</span>
+                <strong>{summary.archivePeople}</strong>
+                <small>tarih boyunca adı geçen kişi</small>
+              </article>
+              <article>
+                <span>Pipeline</span>
+                <strong>{summary.pipelinePeople}</strong>
+                <small>gerçek PWB statüsü atanmış kişi</small>
+              </article>
+              <article>
+                <span>Son 60 gün aktif</span>
+                <strong>{summary.active60d}</strong>
+                <small>en az bir mesajı olan kişi</small>
+              </article>
+              <article>
+                <span>Üyelik olayıyla mevcut</span>
+                <strong>{summary.currentMembers}</strong>
+                <small>katılım/eklenme verisinden çıkarılan</small>
+              </article>
+            </section>
+
+            {globalTopics.length > 0 && (
+              <section className="topic-overview">
+                <div>
+                  <p className="eyebrow">KONU HARİTASI</p>
+                  <h2>Topluluk ne konuşuyor?</h2>
+                </div>
+                <div className="topic-cloud">
+                  {globalTopics.slice(0, 10).map((item) => (
+                    <span className="topic-pill" key={item.topic}>
+                      {item.topic} <b>{item.count}</b>
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <div className="section-heading compact-heading">
+              <div>
+                <p className="eyebrow">PWB PIPELINE</p>
+                <h2>Statüler</h2>
+              </div>
+              <span>Arşiv kişilerinden ayrı</span>
+            </div>
 
             <section className="stat-grid">
               {counts.map(({ status, count }) => (
@@ -313,7 +400,7 @@ export default function Dashboard() {
                           <div className="approval-title-row">
                             <h3>{person.name}</h3>
                             <span className={statusClass(person.status)}>
-                              {person.status}
+                              {person.status || "Arşiv"}
                             </span>
                           </div>
                           <strong>{approval.title}</strong>
@@ -367,17 +454,25 @@ export default function Dashboard() {
               <span>Kişi</span>
               <span>Rol</span>
               <span>Statü</span>
-              <span>Creative</span>
+              <span>Üyelik</span>
               <span>Son Aktivite</span>
+              <span>Konular</span>
               <span>Katkı</span>
             </div>
             {people.map((person) => (
               <div className="roster-row" key={person.id}>
                 <strong>{person.name}</strong>
                 <span>{person.role}</span>
-                <span className={statusClass(person.status)}>{person.status}</span>
-                <span>{person.creative ?? "—"}</span>
+                <span className={statusClass(person.status)}>
+                  {person.status || "Arşiv"}
+                </span>
+                <span>{membershipLabel(person.communityState)}</span>
                 <span>{person.lastActivity}</span>
+                <span className="topic-cell">
+                  {person.topTopics.length
+                    ? person.topTopics.slice(0, 2).join(" · ")
+                    : "—"}
+                </span>
                 <span>{person.contribution}</span>
               </div>
             ))}
@@ -422,7 +517,7 @@ export default function Dashboard() {
                     setImportResult(
                       payload.duplicate
                         ? "Bu ZIP daha önce işlenmiş. Yeni kayıt eklenmedi."
-                        : `${payload.groupName}: ${payload.insertedMessages} yeni mesaj, ${payload.participants} katılımcı işlendi.`,
+                        : `${payload.groupName}: ${payload.insertedMessages} mesaj, ${payload.systemEvents ?? 0} üyelik/sistem olayı, ${payload.participants} arşiv kişisi işlendi${payload.reprocessed ? " (yeniden işlendi)" : ""}.`,
                     );
 
                     form.reset();
