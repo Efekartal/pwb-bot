@@ -53,6 +53,7 @@ export async function POST(
       .from("people")
       .update({
         status: approval.recommendation,
+        is_pipeline_tracked: true,
         updated_at: new Date().toISOString(),
       })
       .eq("id", approval.person_id);
