@@ -9,8 +9,18 @@ const publicPaths = [
   "/api/cron/",
 ];
 
+const teamPaths = ["/ekip", "/api/team/"];
+
 export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+
+  if (teamPaths.some((path) => pathname.startsWith(path))) {
+    const response = NextResponse.next();
+    response.headers.set("Cache-Control", "private, no-store");
+    response.headers.set("Referrer-Policy", "no-referrer");
+    response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+    return response;
+  }
 
   if (publicPaths.some((path) => pathname.startsWith(path))) {
     return NextResponse.next();
