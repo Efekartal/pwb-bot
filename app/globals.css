@@ -509,3 +509,20 @@ nav small { background: #74202a; color: white; border-radius: 99px; padding: 2px
   .profile-two-col { grid-template-columns:1fr; }
   .profile-topic-row { grid-template-columns:120px 1fr; }
 }
+
+nav a {
+  width:100%;
+  color:#bfc2c9;
+  background:transparent;
+  border:0;
+  padding:12px 13px;
+  border-radius:9px;
+  text-align:left;
+  cursor:pointer;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  text-decoration:none;
+  box-sizing:border-box;
+}
+nav a:hover { background:#18191e; color:#fff; }
