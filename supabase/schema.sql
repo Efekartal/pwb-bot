@@ -67,6 +67,7 @@ create table public.approvals (
 );
 
 create index approvals_state_created_at_idx on public.approvals(state, created_at desc);
+create index approvals_person_id_idx on public.approvals(person_id);
 
 create table public.outbox (
   id uuid primary key default gen_random_uuid(),
@@ -83,6 +84,7 @@ create table public.outbox (
 );
 
 create index outbox_state_created_at_idx on public.outbox(state, created_at);
+create index outbox_person_id_idx on public.outbox(person_id);
 
 create table public.activity_log (
   id uuid primary key default gen_random_uuid(),
@@ -101,7 +103,6 @@ alter table public.approvals enable row level security;
 alter table public.outbox enable row level security;
 alter table public.activity_log enable row level security;
 
-create policy "authenticated can read people" on public.people for select to authenticated using (true);
 create policy "authenticated can manage people" on public.people for all to authenticated using (true) with check (true);
 create policy "authenticated can manage groups" on public.wa_groups for all to authenticated using (true) with check (true);
 create policy "authenticated can read messages" on public.messages for select to authenticated using (true);
