@@ -139,7 +139,7 @@ export default function KadroPageClient() {
 
             {people.map((person) => (
               <button
-                className="roster-row roster-row-button"
+                className={`roster-row roster-row-button ${["left", "removed"].includes(person.communityState) ? "roster-gone" : ""}`}
                 key={person.id}
                 onClick={() => setSelectedPerson(person)}
                 type="button"
