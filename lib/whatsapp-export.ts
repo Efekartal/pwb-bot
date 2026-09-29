@@ -75,11 +75,11 @@ export function classifyTopics(text: string) {
     ["Antrenman", /(antrenman|training|drill|kondisyon|gym|salon|ring içi|sparring)/i],
     ["Karakter/Gimmick", /(gimmick|karakter|persona|heel|face|entrance|giriş müziği|theme)/i],
     ["Hikâye/Promo", /(promo|feud|story|hikaye|hikâye|segment|booking|maç plan|match)/i],
-    ["Ring/Ekipman", /(ring|canvas|turnbuckle|ring ip|post|ekipman)/i],
+    ["Ring/Ekipman", /((^|[^a-z0-9çğıöşü])ring($|[^a-z0-9çğıöşü])|canvas|turnbuckle|ring ip|ekipman)/i],
     ["Mekân/Lojistik", /(mekan|mekân|depo|salon|stüdyo|studio|ulaşım|lojistik)/i],
     ["Creative/Medya", /(video|çekim|kurgu|edit|grafik|logo|poster|kamera|foto)/i],
     ["Sosyal Medya", /(instagram|tiktok|youtube|sosyal medya|reels|post paylaş)/i],
-    ["Sponsor/Finans", /(sponsor|bütçe|butce|para|tl|euro|ödeme|maliyet|finans)/i],
+    ["Sponsor/Finans", /(sponsor|bütçe|butce|(^|[^a-z0-9çğıöşü])para($|[^a-z0-9çğıöşü])|(^|[^a-z0-9çğıöşü])tl($|[^a-z0-9çğıöşü])|euro|ödeme|maliyet|finans)/i],
     ["Yönetim/Operasyon", /(toplantı|görev|yonetim|yönetim|planlama|organizasyon|takvim|deadline)/i],
     ["Katılım/Uygunluk", /(geleceğim|gelicem|katılacağım|uygunum|müsait|musait|gelemem|katılım)/i],
   ];
