@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { initialApprovals, initialPeople } from "@/lib/mock-data";
+import PersonProfile from "@/components/PersonProfile";
 import type { Approval, Person, TalentStatus } from "@/lib/types";
 
 const statusOrder: TalentStatus[] = [
@@ -141,6 +142,7 @@ export default function Dashboard() {
   const [live, setLive] = useState(false);
   const [loadingDecision, setLoadingDecision] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -460,8 +462,13 @@ export default function Dashboard() {
               <span>Katkı</span>
             </div>
             {people.map((person) => (
-              <div className="roster-row" key={person.id}>
-                <strong>{person.name}</strong>
+              <button
+                className="roster-row roster-row-button"
+                key={person.id}
+                onClick={() => setSelectedPerson(person)}
+                type="button"
+              >
+                <strong className="person-link">{person.name}</strong>
                 <span>{person.role}</span>
                 <span className={statusClass(person.status)}>
                   {person.status || "Arşiv"}
@@ -474,7 +481,7 @@ export default function Dashboard() {
                     : "—"}
                 </span>
                 <span>{person.contribution}</span>
-              </div>
+              </button>
             ))}
           </section>
         ) : (
@@ -579,6 +586,13 @@ export default function Dashboard() {
           </section>
         )}
       </section>
+
+      {selectedPerson && (
+        <PersonProfile
+          person={selectedPerson}
+          onClose={() => setSelectedPerson(null)}
+        />
+      )}
     </main>
   );
 }
