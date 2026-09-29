@@ -328,9 +328,9 @@ export default function Dashboard() {
                 <small>gerçek PWB statüsü atanmış kişi</small>
               </article>
               <article>
-                <span>Son 60 gün aktif</span>
+                <span>Doğrulanmış aktif · 60 gün</span>
                 <strong>{summary.active60d}</strong>
-                <small>en az bir mesajı olan kişi</small>
+                <small>üyeliği mevcut + son 60 günde gerçek mesaj</small>
               </article>
               <article>
                 <span>Üyelik olayıyla mevcut</span>
