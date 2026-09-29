@@ -56,9 +56,9 @@ function recommendation(row: Row) {
 
 export default function CleanupPageClient() {
   const [data, setData] = useState<Payload | null>(null);
-  const [filter, setFilter] = useState<"remove_candidate" | "review" | "keep">(
-    "remove_candidate",
-  );
+  const [filter, setFilter] = useState<
+    "remove_candidate" | "review" | "keep" | "already_gone"
+  >("remove_candidate");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -132,9 +132,9 @@ export default function CleanupPageClient() {
                 <small>yakın dönem PWB / operasyon sinyali</small>
               </article>
               <article>
-                <span>Doğrudan çıkarılabilir</span>
-                <strong>{data.summary.actionable}</strong>
-                <small>üyeliği mevcut olarak doğrulanmış</small>
+                <span>Zaten ayrılmış / çıkarılmış</span>
+                <strong>{data.summary.already_gone}</strong>
+                <small>aktif karar listesinden hariç</small>
               </article>
             </section>
 
@@ -162,6 +162,12 @@ export default function CleanupPageClient() {
                 onClick={() => setFilter("keep")}
               >
                 Tut ({data.summary.keep})
+              </button>
+              <button
+                className={filter === "already_gone" ? "cleanup-active" : ""}
+                onClick={() => setFilter("already_gone")}
+              >
+                Zaten Ayrılmış ({data.summary.already_gone})
               </button>
             </div>
 
