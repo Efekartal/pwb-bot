@@ -1,7 +1,14 @@
 import { Approval, Person } from "./types";
 
+const base = {
+  isPipelineTracked: true,
+  communityState: "current" as const,
+  topTopics: [] as string[],
+};
+
 export const initialPeople: Person[] = [
   {
+    ...base,
     id: "p1",
     name: "Mert A.",
     status: "Aktif",
@@ -10,9 +17,11 @@ export const initialPeople: Person[] = [
     lastActivity: "2 gün önce",
     lastActivityDays: 2,
     contribution: "Yüksek",
+    topTopics: ["Antrenman", "Hikâye/Promo"],
     note: "Promo ve toplantı düzenli.",
   },
   {
+    ...base,
     id: "p2",
     name: "Kerem D.",
     status: "Geri Dönüş",
@@ -21,9 +30,11 @@ export const initialPeople: Person[] = [
     lastActivity: "74 gün önce",
     lastActivityDays: 74,
     contribution: "Yüksek",
+    topTopics: ["Karakter/Gimmick"],
     note: "Geçmişte aktifti, son aylarda sessiz.",
   },
   {
+    ...base,
     id: "p3",
     name: "Ömer F.",
     status: "Gelişim",
@@ -32,9 +43,11 @@ export const initialPeople: Person[] = [
     lastActivity: "31 gün önce",
     lastActivityDays: 31,
     contribution: "Orta",
+    topTopics: ["Karakter/Gimmick", "Creative/Medya"],
     note: "Karakter çalışması başladı.",
   },
   {
+    ...base,
     id: "p4",
     name: "Mehmet K.",
     status: "Yeni Aday",
@@ -42,9 +55,11 @@ export const initialPeople: Person[] = [
     lastActivity: "Bugün",
     lastActivityDays: 0,
     contribution: "Yeni",
+    topTopics: ["Antrenman"],
     note: "Daha önce wrestling eğitimi almamış.",
   },
   {
+    ...base,
     id: "p5",
     name: "Bora T.",
     status: "Beklemede",
@@ -52,9 +67,11 @@ export const initialPeople: Person[] = [
     lastActivity: "46 gün önce",
     lastActivityDays: 46,
     contribution: "Orta",
+    topTopics: ["Katılım/Uygunluk"],
     note: "Şehir dışında olduğu için ara verdi.",
   },
   {
+    ...base,
     id: "p6",
     name: "Can Y.",
     status: "Aday Havuzu",
@@ -62,6 +79,7 @@ export const initialPeople: Person[] = [
     lastActivity: "112 gün önce",
     lastActivityDays: 112,
     contribution: "Düşük",
+    topTopics: [],
     note: "İlgisi var, henüz somut katkı yok.",
   },
 ];
