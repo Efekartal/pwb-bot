@@ -41,7 +41,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const response = NextResponse.redirect(new URL("/ekip", request.url), 303);
+  const response = new NextResponse(null, {
+    status: 303,
+    headers: {
+      Location: "/ekip",
+    },
+  });
   response.cookies.set({
     name: TEAM_COOKIE_NAME,
     value: createTeamSession(),
