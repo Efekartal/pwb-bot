@@ -6,15 +6,20 @@ export type TalentStatus =
   | "Beklemede"
   | "Aday Havuzu";
 
+export type CommunityState = "unknown" | "current" | "left" | "removed";
+
 export type Person = {
   id: string;
   name: string;
-  status: TalentStatus;
+  status: TalentStatus | null;
+  isPipelineTracked: boolean;
+  communityState: CommunityState;
   role: "Güreşçi" | "Creative" | "Yönetim" | "Topluluk";
   creative?: string;
   lastActivity: string;
   lastActivityDays: number;
   contribution: "Yüksek" | "Orta" | "Düşük" | "Yeni";
+  topTopics: string[];
   note?: string;
 };
 
